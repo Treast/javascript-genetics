@@ -5,8 +5,11 @@ import Utils from './Utils';
 const MIN_RADIUS = 8;
 const MAX_RADIUS = 25;
 
+const NUMBER_CIRCLE = 400;
+const NUMBER_ARGUMENTS_BY_CIRCLE = 7;
+
 /**
- * Genes: x, y, radius, r, g, b
+ * Genes: x, y, radius, r, g, b, alpha
  */
 class Chromosome {
   private fitness: number = 0;
@@ -14,7 +17,7 @@ class Chromosome {
 
   public constructor(genes: number[] = []) {
     if (genes.length === 0) {
-      for (let i = 0; i < 7; i += 1) {
+      for (let i = 0; i < NUMBER_CIRCLE * NUMBER_ARGUMENTS_BY_CIRCLE; i += 1) {
         this.genes.push(new Gene());
       }
     } else {
@@ -25,11 +28,12 @@ class Chromosome {
   }
 
   public getGenesArray(): number[] {
-    return this.genes.slice(2).map((gene) => gene.get());
+    return this.genes.map((gene) => gene.get());
   }
 
   public setGenes(genes: number[]) {
-    this.genes = this.genes.slice(0, 2);
+    this.genes = [];
+
     genes.map((gene) => {
       this.genes.push(new Gene(gene));
     });
@@ -43,74 +47,43 @@ class Chromosome {
    * @param referenceImage
    * @param canvas
    */
-  public computeFitness(referenceImageData: Uint8ClampedArray, rendererImageData: Uint8ClampedArray, width: number, height: number) {
-    const sumDiffColors = [];
+  public computeFitness(referenceImageData: Uint8ClampedArray, width: number, height: number) {
+    const canvas = new OffscreenCanvas(width, height);
 
-    const x = this.getX(width);
-    const y = this.getY(height);
+    const ctx = canvas.getContext('2d');
 
-    sumDiffColors.push(this.computeFitnessAtPixel(x, y, referenceImageData, rendererImageData, width, height));
+    this.renderChromosome(ctx, width, height);
 
-    for (let i = 0; i < this.getRadius(); i += 2) {
-      for (let r = 0; r < Math.PI * 2; r += Math.PI / 6) {
-        const diff = this.computeFitnessOnRadius(x, y, r, i, referenceImageData, rendererImageData, width, height);
+    const rendererImageData = ctx.getImageData(0, 0, width, height).data;
 
-        if (diff) sumDiffColors.push(diff);
+    const differences = [];
+
+    for (let x = 0; x < width; x += 1) {
+      for (let y = 0; y < height; y += 1) {
+        const idx = (y * width + x) * 4;
+
+        const r1 = referenceImageData[idx];
+        const g1 = referenceImageData[idx + 1];
+        const b1 = referenceImageData[idx + 2];
+
+        const r2 = rendererImageData[idx];
+        const g2 = rendererImageData[idx + 1];
+        const b2 = rendererImageData[idx + 2];
+
+        differences.push(Utils.compareColor(r1, g1, b1, r2, g2, b2));
       }
     }
 
-    this.fitness = (sumDiffColors.reduce((acc, val) => acc + val) * this.clampRadius(this.getRadius())) / sumDiffColors.length;
+    this.fitness = differences.reduce((acc, val) => acc + val) / differences.length;
 
     if (isNaN(this.fitness)) this.fitness = 0;
 
     return this.fitness;
   }
 
-  private clampRadius(x: number): number {
-    return this.map(Math.log(x), Math.log(MIN_RADIUS), Math.log(MAX_RADIUS), 1, 1.02);
-  }
-
-  private map(value: number, x1: number, y1: number, x2: number, y2: number) {
-    return ((value - x1) * (y2 - x2)) / (y1 - x1) + x2;
-  }
-
-  private computeFitnessOnRadius(
-    x: number,
-    y: number,
-    angle: number,
-    radius: number,
-    image1: Uint8ClampedArray,
-    image2: Uint8ClampedArray,
-    width: number,
-    height: number
-  ) {
-    const newX = Math.floor(x + Math.cos(angle) * radius);
-    const newY = Math.floor(y + Math.sin(angle) * radius);
-
-    if (newX > 0 && newX < width && newY > 0 && newY < height) {
-      return this.computeFitnessAtPixel(newX, newY, image1, image2, width, height);
-    }
-
-    return null;
-  }
-
-  private computeFitnessAtPixel(x: number, y: number, image1Data: Uint8ClampedArray, image2Data: Uint8ClampedArray, width: number, height: number) {
-    const idx = (y * width + x) * 4;
-
-    const r1 = image1Data[idx];
-    const g1 = image1Data[idx + 1];
-    const b1 = image1Data[idx + 2];
-
-    const r2 = image2Data[idx];
-    const g2 = image2Data[idx + 1];
-    const b2 = image2Data[idx + 2];
-
-    return Utils.compareColor(r1, g1, b1, r2, g2, b2);
-  }
-
   public mutate(mutationRate: number) {
     if (Math.random() < mutationRate) {
-      const idx = Math.floor(Math.random() * (this.genes.length - 2)) + 2;
+      const idx = Math.floor(Math.random() * this.genes.length);
       this.genes[idx] = new Gene();
     }
   }
@@ -128,27 +101,30 @@ class Chromosome {
     this.renderChromosome(ctx, rendererCtx.width, rendererCtx.height);
   }
 
-  private getX(width: number): number {
-    return Math.round(this.getGene(0) * width);
+  private getCircle(idx: number) {
+    return this.genes.slice(idx * NUMBER_ARGUMENTS_BY_CIRCLE, (idx + 1) * NUMBER_ARGUMENTS_BY_CIRCLE);
   }
 
-  private getY(height: number): number {
-    return Math.round(this.getGene(1) * height);
+  public getCircleGene(circleIdx: number, geneIdx: number) {
+    return this.genes[circleIdx * NUMBER_ARGUMENTS_BY_CIRCLE + geneIdx].get();
   }
 
-  private getRadius(): number {
-    return Math.round(this.getGene(2) * (MAX_RADIUS - MIN_RADIUS) + MIN_RADIUS);
-  }
+  private renderChromosome(ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, width: number, height: number) {
+    for (let i = 0; i < NUMBER_CIRCLE; i += 1) {
+      const circleX = this.getCircleGene(i, 0) * width;
+      const circleY = this.getCircleGene(i, 1) * height;
+      const circleRadius = Math.round(this.getCircleGene(i, 2) * (MAX_RADIUS - MIN_RADIUS) + MIN_RADIUS);
+      const circleR = this.getCircleGene(i, 3);
+      const circleG = this.getCircleGene(i, 4);
+      const circleB = this.getCircleGene(i, 5);
+      const circleA = this.getCircleGene(i, 6);
 
-  private renderChromosome(ctx: CanvasRenderingContext2D, width: number, height: number) {
-    ctx.beginPath();
-    ctx.fillStyle = `rgba(${this.getGene(3) * 255}, ${this.getGene(4) * 255}, ${this.getGene(5) * 255}, ${this.getGene(6)})`;
-    ctx.arc(this.getX(width), this.getY(height), this.getRadius(), 0, Math.PI * 2);
-    ctx.closePath();
-    ctx.fill();
-
-    // ctx.fillStyle = '#f00';
-    // ctx.fillRect(this.getX(width), this.getY(height), 2, 2);
+      ctx.beginPath();
+      ctx.fillStyle = `rgba(${circleR * 255}, ${circleG * 255}, ${circleB * 255}, ${circleA})`;
+      ctx.arc(circleX, circleY, circleRadius, 0, Math.PI * 2);
+      ctx.closePath();
+      ctx.fill();
+    }
   }
 }
 

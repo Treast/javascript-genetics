@@ -5,7 +5,7 @@ const app = new App();
 
 const IMAGE_WIDTH = 458;
 const IMAGE_HEIGHT = 380;
-const genome = new Genome(800, 20000).setMutationRate(0.3).setSelectionRate(0.4);
+const genome = new Genome(200, 20000).setMutationRate(0.5).setSelectionRate(0.3).setScale(0.2);
 
 const buttonRun = document.querySelector('#buttonRun');
 const roundSpan = document.querySelector('#informationRound span') as HTMLSpanElement;
@@ -33,9 +33,8 @@ const initReference = (referenceRef: HTMLCanvasElement) => {
     console.log('Image loaded');
     ctx.drawImage(painting, 0, 0, IMAGE_WIDTH, IMAGE_HEIGHT);
 
-    genome.setReference(ctx);
+    genome.setReference(referenceRef);
 
-    genome.compareToReference();
     showInformations();
   };
 

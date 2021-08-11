@@ -31,15 +31,17 @@ class Genome {
 
   private rendererCtx: HTMLCanvasElement;
 
-  private bestIterationSoFar: Chromosome[] = [];
-  private bestIterationCompliance: number = -1;
+  private scaleReferenceImage: HTMLCanvasElement;
+  private scaleReferenceContext: CanvasRenderingContext2D;
+
+  private scale: number = 1;
 
   private genomeState: IGenomeState = {
     round: 0,
     compliance: 0,
   };
 
-  public referenceImage: CanvasRenderingContext2D | null = null;
+  public referenceImage: HTMLCanvasElement | null = null;
 
   public constructor(size: number, maxRound: number) {
     this.maxRound = maxRound;
@@ -48,6 +50,9 @@ class Genome {
     for (let i = 0; i < size; i += 1) {
       this.population.push(new Chromosome());
     }
+
+    this.scaleReferenceImage = document.createElement('canvas');
+    this.scaleReferenceContext = this.scaleReferenceImage.getContext('2d');
   }
 
   public setMutationRate(mutationRate: number) {
@@ -60,12 +65,28 @@ class Genome {
     return this;
   }
 
+  public setScale(scale: number) {
+    this.scale = scale;
+
+    if (this.referenceImage) this.setScaleImage();
+
+    return this;
+  }
+
   public setRenderer(rendererCtx: HTMLCanvasElement) {
     this.rendererCtx = rendererCtx;
   }
 
-  public setReference(referenceImage: CanvasRenderingContext2D) {
+  public setScaleImage() {
+    this.scaleReferenceImage.width = this.referenceImage.width * this.scale;
+    this.scaleReferenceImage.height = this.referenceImage.height * this.scale;
+
+    this.scaleReferenceContext.drawImage(this.referenceImage, 0, 0, this.referenceImage.width * this.scale, this.referenceImage.height * this.scale);
+  }
+
+  public setReference(referenceImage: HTMLCanvasElement) {
     this.referenceImage = referenceImage;
+    this.setScaleImage();
   }
 
   public getState() {
@@ -83,7 +104,6 @@ class Genome {
     this.genomeState.round += 1;
 
     this.computeFitness();
-
     this.makeSelection();
     this.makeCrossover();
 
@@ -92,55 +112,13 @@ class Genome {
 
   private computeFitness() {
     if (this.rendererCtx) {
-      const sumFitness: number[] = [];
-
-      const image1Data = this.referenceImage.getImageData(0, 0, this.rendererCtx.width, this.rendererCtx.height).data;
-      const image2Data = this.rendererCtx.getContext('2d').getImageData(0, 0, this.rendererCtx.width, this.rendererCtx.height).data;
+      const image1Data = this.scaleReferenceContext.getImageData(0, 0, this.scaleReferenceImage.width, this.scaleReferenceImage.height).data;
 
       this.population.forEach((chromosome) => {
         if (this.referenceImage) {
-          const fitness = chromosome.computeFitness(image1Data, image2Data, this.rendererCtx.width, this.rendererCtx.height);
-          sumFitness.push(fitness);
+          chromosome.computeFitness(image1Data, this.scaleReferenceImage.width, this.scaleReferenceImage.height);
         }
       });
-
-      this.compareToReference();
-    }
-  }
-
-  public compareToReference() {
-    const image1Data = this.referenceImage.getImageData(0, 0, this.rendererCtx.width, this.rendererCtx.height).data;
-    const image2Data = this.rendererCtx.getContext('2d').getImageData(0, 0, this.rendererCtx.width, this.rendererCtx.height).data;
-
-    const differences = [];
-
-    for (let x = 0; x < this.rendererCtx.width; x += 5) {
-      for (let y = 0; y < this.rendererCtx.height; y += 5) {
-        const idx = (y * this.rendererCtx.width + x) * 4;
-
-        const r1 = image1Data[idx];
-        const g1 = image1Data[idx + 1];
-        const b1 = image1Data[idx + 2];
-
-        const r2 = image2Data[idx];
-        const g2 = image2Data[idx + 1];
-        const b2 = image2Data[idx + 2];
-
-        // console.log(r1, g1, b1, r2, g2, b2, Utils.compareColor(r1, g1, b1, r2, g2, b2));
-
-        differences.push(Utils.compareColorStrict(r1, g1, b1, r2, g2, b2));
-      }
-    }
-
-    const compliance = differences.reduce((acc, val) => acc + val) / differences.length;
-
-    if (compliance < this.bestIterationCompliance) {
-      this.population = [...this.bestIterationSoFar];
-      this.genomeState.compliance = this.bestIterationCompliance;
-    } else {
-      this.genomeState.compliance = compliance;
-      this.bestIterationSoFar = [...this.population];
-      this.bestIterationCompliance = compliance;
     }
   }
 
@@ -148,6 +126,8 @@ class Genome {
     this.population.sort((a: Chromosome, b: Chromosome) => {
       return b.getFitness() - a.getFitness();
     });
+
+    this.genomeState.compliance = this.population[0].getFitness();
 
     const idx = Math.round(this.selectionRate * this.size);
 
@@ -177,35 +157,34 @@ class Genome {
    * Pour chaque individu manquant, on sélectionne 2 individus et on fusionne leurs gènes
    */
   private makeCrossover() {
+    let chromosomeA: Chromosome, chromosomeB: Chromosome;
+    let chromosomeAIdx: number;
+    let remainingChromosomes: Chromosome[] = [];
+    let chromosomes1: number[], chromosomes2: number[], newChromosomes: number[], genes: number[], sliceIdx: number[];
+
     for (let i = 0; i < this.worstChromosomes.length; i += 1) {
-      const worstChromosome: Chromosome = this.worstChromosomes[i];
+      chromosomeA = this.getRandomChromosome(this.bestChromosomes);
+      chromosomeAIdx = this.bestChromosomes.indexOf(chromosomeA);
+      remainingChromosomes = [...this.bestChromosomes.slice(0, chromosomeAIdx), ...this.bestChromosomes.slice(chromosomeAIdx)];
 
-      let chromosomeA, chromosomeB;
+      chromosomeB = this.getRandomChromosome(remainingChromosomes);
 
-      do {
-        chromosomeA = this.getRandomChromosome(this.bestChromosomes);
-        chromosomeB = this.getRandomChromosome(this.bestChromosomes);
-      } while (!chromosomeA || !chromosomeB || chromosomeA === chromosomeB);
+      chromosomes1 = chromosomeA.getGenesArray();
+      chromosomes2 = chromosomeB.getGenesArray();
 
-      const chromosomes1 = chromosomeA.getGenesArray();
-      const chromosomes2 = chromosomeB.getGenesArray();
+      genes = [...chromosomes1];
+      sliceIdx = genes
+        .sort(() => {
+          return 0.5 - Math.random();
+        })
+        .slice(0, 2)
+        .map((gene: number) => {
+          return chromosomes1.indexOf(gene);
+        });
 
-      const sliceIdx: number[] = [-1, -1];
+      newChromosomes = [...chromosomes1.slice(0, sliceIdx[0]), ...chromosomes2.slice(sliceIdx[0], sliceIdx[1]), ...chromosomes1.slice(sliceIdx[1])];
 
-      do {
-        sliceIdx[0] = Math.floor(Math.random() * (chromosomes1.length - 2) + 1);
-        sliceIdx[1] = Math.floor(Math.random() * (chromosomes1.length - 2) + 1);
-      } while (sliceIdx[0] === -1 || sliceIdx[1] === -1 || sliceIdx[0] === sliceIdx[1]);
-
-      sliceIdx.sort();
-
-      const newChromosomes = [
-        ...chromosomes1.slice(0, sliceIdx[0]),
-        ...chromosomes2.slice(sliceIdx[0], sliceIdx[1]),
-        ...chromosomes1.slice(sliceIdx[1]),
-      ];
-
-      worstChromosome.setGenes(newChromosomes);
+      this.worstChromosomes[i].setGenes(newChromosomes);
     }
   }
 
@@ -220,13 +199,10 @@ class Genome {
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, this.rendererCtx.width, this.rendererCtx.height);
 
-    for (let i = 0; i < this.population.length; i += 1) {
-      this.population[i].render(this.rendererCtx);
-    }
-
-    // for (let i = 0; i < 100; i += 1) {
-    // }
     this.run();
+
+    this.population[0].render(this.rendererCtx);
+
     cb();
 
     if (this.genomeState.round < this.maxRound) requestAnimationFrame(() => this.render(cb));
