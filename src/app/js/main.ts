@@ -4,7 +4,7 @@ import Genome from './utils/genome.js/Genome';
 const app = new App();
 
 const genome = new Genome(50)
-  .setMutationRate(0.05)
+  .setMutationRate(0.2)
   .setSelectionRate(0.3)
   .setRendererSize({ height: 380, width: 430 })
   .setComputingSize({ height: 75, width: 75 });
