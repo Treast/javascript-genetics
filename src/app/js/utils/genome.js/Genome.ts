@@ -8,15 +8,24 @@ export interface IRendererContext {
 }
 
 export interface IGenomeState {
-  round: number;
+  generation: number;
   compliance: number;
+  maxGeneration: number;
+}
+
+export interface ISize {
+  height: number;
+  width: number;
+}
+
+export interface ICanvas {
+  canvas: HTMLCanvasElement;
+  ctx: CanvasRenderingContext2D;
 }
 
 class Genome {
   private population: Chromosome[] = [];
-  private round: number = 0;
-  private maxRound: number;
-  private size: number;
+  private populationSize: number;
 
   private sumFitness: number = 0;
 
@@ -26,33 +35,57 @@ class Genome {
   private bestChromosomes: Chromosome[] = [];
   private worstChromosomes: Chromosome[] = [];
 
-  private mutationRate: number = 0.5;
+  private mutationRate: number = 0.01;
   private selectionRate: number = 0.5;
 
-  private rendererCtx: HTMLCanvasElement;
+  private renderer: ICanvas;
+  private reference: ICanvas;
 
-  private scaleReferenceImage: HTMLCanvasElement;
-  private scaleReferenceContext: CanvasRenderingContext2D;
+  private rendererSize: ISize;
+  private computingSize: ISize;
 
-  private scale: number = 1;
-
-  private genomeState: IGenomeState = {
-    round: 0,
+  private state: IGenomeState = {
+    generation: 0,
     compliance: 0,
+    maxGeneration: 0,
   };
 
-  public referenceImage: HTMLCanvasElement | null = null;
+  public constructor(populationSize: number) {
+    this.populationSize = populationSize;
 
-  public constructor(size: number, maxRound: number) {
-    this.maxRound = maxRound;
-    this.size = size;
-
-    for (let i = 0; i < size; i += 1) {
+    for (let i = 0; i < populationSize; i += 1) {
       this.population.push(new Chromosome());
     }
 
-    this.scaleReferenceImage = document.createElement('canvas');
-    this.scaleReferenceContext = this.scaleReferenceImage.getContext('2d');
+    const referenceCanvas = document.createElement('canvas');
+    const rendererCanvas = document.createElement('canvas');
+
+    this.reference = {
+      canvas: referenceCanvas,
+      ctx: referenceCanvas.getContext('2d'),
+    };
+
+    this.renderer = {
+      canvas: rendererCanvas,
+      ctx: rendererCanvas.getContext('2d'),
+    };
+  }
+
+  public loadImage(imageSrc: string): Genome {
+    const image = new Image();
+
+    image.onload = () => {
+      this.reference.ctx.drawImage(image, 0, 0, image.width, image.height, 0, 0, this.rendererSize.width, this.rendererSize.height);
+    };
+
+    image.src = imageSrc;
+
+    return this;
+  }
+
+  public init(container: Element) {
+    container.appendChild(this.reference.canvas);
+    container.appendChild(this.renderer.canvas);
   }
 
   public setMutationRate(mutationRate: number) {
@@ -65,61 +98,52 @@ class Genome {
     return this;
   }
 
-  public setScale(scale: number) {
-    this.scale = scale;
+  public setRendererSize(rendererSize: ISize) {
+    this.rendererSize = rendererSize;
 
-    if (this.referenceImage) this.setScaleImage();
+    this.reference.canvas.width = rendererSize.width;
+    this.reference.canvas.height = rendererSize.height;
+
+    this.renderer.canvas.width = rendererSize.width;
+    this.renderer.canvas.height = rendererSize.height;
 
     return this;
   }
 
-  public setRenderer(rendererCtx: HTMLCanvasElement) {
-    this.rendererCtx = rendererCtx;
-  }
-
-  public setScaleImage() {
-    this.scaleReferenceImage.width = this.referenceImage.width * this.scale;
-    this.scaleReferenceImage.height = this.referenceImage.height * this.scale;
-
-    this.scaleReferenceContext.drawImage(this.referenceImage, 0, 0, this.referenceImage.width * this.scale, this.referenceImage.height * this.scale);
-  }
-
-  public setReference(referenceImage: HTMLCanvasElement) {
-    this.referenceImage = referenceImage;
-    this.setScaleImage();
+  public setComputingSize(computingSize: ISize) {
+    this.computingSize = computingSize;
+    return this;
   }
 
   public getState() {
-    return this.genomeState;
+    return this.state;
   }
 
-  public runRounds(cb: () => void) {
-    for (let i = 0; i < this.maxRound; i += 1) {
-      this.run();
-      cb();
-    }
+  public generate(numberOfGeneration: number = 1, callback: () => void = () => {}) {
+    this.state.maxGeneration += numberOfGeneration;
+    this.render(callback);
   }
 
-  public run() {
-    this.genomeState.round += 1;
+  private generateGeneration() {
+    this.state.generation += 1;
 
-    this.computeFitness();
-    this.makeSelection();
-    this.makeCrossover();
+    this.computeFitness(); // + Sensible
+    this.makeSelection(); // Peu probable
+    this.makeCrossover(); //
 
-    if (this.genomeState.round !== this.maxRound) this.makeMutation();
+    if (this.state.generation !== this.state.maxGeneration) this.makeMutation();
   }
 
   private computeFitness() {
-    if (this.rendererCtx) {
-      const image1Data = this.scaleReferenceContext.getImageData(0, 0, this.scaleReferenceImage.width, this.scaleReferenceImage.height).data;
+    const offscreenCanvas = new OffscreenCanvas(this.computingSize.width, this.computingSize.height);
+    const offscreenCtx = offscreenCanvas.getContext('2d');
 
-      this.population.forEach((chromosome) => {
-        if (this.referenceImage) {
-          chromosome.computeFitness(image1Data, this.scaleReferenceImage.width, this.scaleReferenceImage.height);
-        }
-      });
-    }
+    offscreenCtx.drawImage(this.reference.canvas, 0, 0, this.rendererSize.width, this.rendererSize.height);
+    const imageData = offscreenCtx.getImageData(0, 0, this.computingSize.width, this.computingSize.height).data;
+
+    this.population.forEach((chromosome) => {
+      chromosome.computeFitnessByDifference(imageData, this.computingSize.width, this.computingSize.height);
+    });
   }
 
   private makeSelection() {
@@ -127,9 +151,9 @@ class Genome {
       return b.getFitness() - a.getFitness();
     });
 
-    this.genomeState.compliance = this.population[0].getFitness();
+    this.state.compliance = this.population[0].getFitness();
 
-    const idx = Math.round(this.selectionRate * this.size);
+    const idx = Math.round(this.selectionRate * this.populationSize);
 
     this.bestChromosomes = this.population.slice(0, idx);
     this.worstChromosomes = this.population.slice(idx);
@@ -141,7 +165,7 @@ class Genome {
     });
   }
 
-  getRandomChromosome(selectedChromosomes: Chromosome[]) {
+  private getRandomChromosome(selectedChromosomes: Chromosome[]) {
     const random = Math.random() * this.sumFitness;
     let sumFitness = 0;
     for (const chromosome of selectedChromosomes) {
@@ -172,17 +196,9 @@ class Genome {
       chromosomes1 = chromosomeA.getGenesArray();
       chromosomes2 = chromosomeB.getGenesArray();
 
-      genes = [...chromosomes1];
-      sliceIdx = genes
-        .sort(() => {
-          return 0.5 - Math.random();
-        })
-        .slice(0, 2)
-        .map((gene: number) => {
-          return chromosomes1.indexOf(gene);
-        });
+      const sliceIdx = Math.floor(Math.random() * chromosomes1.length);
 
-      newChromosomes = [...chromosomes1.slice(0, sliceIdx[0]), ...chromosomes2.slice(sliceIdx[0], sliceIdx[1]), ...chromosomes1.slice(sliceIdx[1])];
+      newChromosomes = [...chromosomes1.slice(0, sliceIdx), ...chromosomes2.slice(sliceIdx)];
 
       this.worstChromosomes[i].setGenes(newChromosomes);
     }
@@ -194,18 +210,17 @@ class Genome {
     });
   }
 
-  public render(cb: () => void) {
-    const ctx = this.rendererCtx.getContext('2d');
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, this.rendererCtx.width, this.rendererCtx.height);
+  public render(callback: () => void) {
+    this.renderer.ctx.fillStyle = '#000';
+    this.renderer.ctx.fillRect(0, 0, this.renderer.canvas.width, this.renderer.canvas.height);
 
-    this.run();
+    this.generateGeneration();
 
-    this.population[0].render(this.rendererCtx);
+    this.population[0].render(this.renderer.canvas);
 
-    cb();
+    callback();
 
-    if (this.genomeState.round < this.maxRound) requestAnimationFrame(() => this.render(cb));
+    if (this.state.generation < this.state.maxGeneration) requestAnimationFrame(() => this.render(callback));
   }
 }
 

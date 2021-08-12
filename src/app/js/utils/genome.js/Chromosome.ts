@@ -2,6 +2,9 @@ import Gene from './Gene';
 import { IRendererContext } from './Genome';
 import Utils from './Utils';
 
+/**
+ * To refactor
+ */
 const MIN_RADIUS = 8;
 const MAX_RADIUS = 25;
 
@@ -14,6 +17,9 @@ const NUMBER_ARGUMENTS_BY_CIRCLE = 7;
 class Chromosome {
   private fitness: number = 0;
   private genes: Gene[] = [];
+
+  private offscreenCanvas: OffscreenCanvas;
+  private offscreenCtx: OffscreenCanvasRenderingContext2D;
 
   public constructor(genes: number[] = []) {
     if (genes.length === 0) {
@@ -47,9 +53,27 @@ class Chromosome {
    * @param referenceImage
    * @param canvas
    */
+  public computeFitnessByDifference(referenceImageData: Uint8ClampedArray, width: number, height: number) {
+    this.offscreenCanvas = new OffscreenCanvas(width, height);
+    this.offscreenCtx = this.offscreenCanvas.getContext('2d');
+
+    this.renderChromosome(this.offscreenCtx, width, height);
+
+    const rendererImageData = this.offscreenCtx.getImageData(0, 0, width, height).data;
+
+    let difference: number = 0;
+
+    for (let i = 0; i < referenceImageData.length; i += 1) {
+      difference += Math.abs(rendererImageData[i] - referenceImageData[i]) / 255;
+    }
+
+    this.fitness = 1 - difference / referenceImageData.length;
+
+    return this.fitness;
+  }
+
   public computeFitness(referenceImageData: Uint8ClampedArray, width: number, height: number) {
     const canvas = new OffscreenCanvas(width, height);
-
     const ctx = canvas.getContext('2d');
 
     this.renderChromosome(ctx, width, height);
