@@ -196,9 +196,9 @@ class Genome {
       chromosomes1 = chromosomeA.getGenesArray();
       chromosomes2 = chromosomeB.getGenesArray();
 
-      const sliceIdx = Math.floor(Math.random() * chromosomes1.length);
+      const sliceIdx = Math.floor((Math.random() * chromosomes1.length) / 7);
 
-      newChromosomes = [...chromosomes1.slice(0, sliceIdx), ...chromosomes2.slice(sliceIdx)];
+      newChromosomes = [...chromosomes1.slice(0, sliceIdx * 7), ...chromosomes2.slice(sliceIdx * 7)];
 
       this.worstChromosomes[i].setGenes(newChromosomes);
     }
