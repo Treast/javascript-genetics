@@ -4,10 +4,10 @@ import Genome from './utils/genome.js/Genome';
 const app = new App();
 
 const genome = new Genome(50)
-  .setMutationRate(0.2)
-  .setSelectionRate(0.3)
-  .setRendererSize({ height: 380, width: 430 })
-  .setComputingSize({ height: 75, width: 75 });
+  .setMutationRate(0.05)
+  .setSelectionRate(0.15)
+  .setRendererSize({ height: 400, width: 400 })
+  .setComputingSize({ height: 80, width: 80 });
 
 const buttonRun = document.querySelector('#buttonRun');
 const roundSpan = document.querySelector('#informationRound span') as HTMLSpanElement;
@@ -24,7 +24,7 @@ const onButtonRunClick = (e: Event) => {
   e.preventDefault();
   console.log('Running');
 
-  genome.generate(500, () => {
+  genome.generate(10000, () => {
     showInformations();
   });
 };

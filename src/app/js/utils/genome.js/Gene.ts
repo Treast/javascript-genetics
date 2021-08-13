@@ -1,11 +1,29 @@
-class Gene {
-  private value: number;
+export interface IGene {
+  x: number;
+  y: number;
+  radius: number;
+  r: number;
+  g: number;
+  b: number;
+  a: number;
+}
 
-  public constructor(value: number | null = null) {
-    this.value = value || Math.random();
+class Gene {
+  private value: IGene;
+
+  public constructor(value: IGene | null = null) {
+    this.value = value || {
+      x: Math.random(),
+      y: Math.random(),
+      radius: Math.random(),
+      r: Math.random(),
+      g: Math.random(),
+      b: Math.random(),
+      a: Math.random(),
+    };
   }
 
-  public get() {
+  public get(): IGene {
     return this.value;
   }
 }

@@ -1,7 +1,7 @@
 # TODO
 
-- MakeCrossover -> Mélange de l’ADN (groupe de 7)
-- Tester Workers / GPU.js
+- ~~MakeCrossover -> Mélange de l’ADN (groupe de 7)~~
+- ~~Tester Workers / GPU.js~~
 
 # Improvments
 

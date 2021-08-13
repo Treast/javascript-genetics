@@ -28,6 +28,7 @@
     "devDependencies": {
         "@types/bluebird": "^3.5.29",
         "@types/core-js": "^0.9.46",
+        "@types/workerpool": "^6.1.0",
         "babel-core": "^6.26.3",
         "babel-loader": "^7.1.5",
         "babel-plugin-add-module-exports": "^0.2.1",
@@ -47,6 +48,7 @@
         "mocha": "^5.2.0",
         "node-sass": "^4.13.1",
         "sass-loader": "^7.3.1",
+        "serialize-javascript": ">=3.1.0",
         "style-loader": "^0.22.1",
         "ts-loader": "^5.4.5",
         "tslint": "^5.20.1",
@@ -56,10 +58,11 @@
         "uglifyjs-webpack-plugin": "^1.3.0",
         "webpack": "^4.41.6",
         "webpack-cli": "^3.3.11",
-        "webpack-dev-server": "^3.10.3",
-        "serialize-javascript": ">=3.1.0"
+        "webpack-dev-server": "^3.10.3"
     },
     "dependencies": {
-        "bluebird": "^3.7.2"
+        "bluebird": "^3.7.2",
+        "gpu.js": "^2.11.3",
+        "workerpool": "^6.1.5"
     }
 }

@@ -1,14 +1,15 @@
-import Gene from './Gene';
-import { IRendererContext } from './Genome';
+import Gene, { IGene } from './Gene';
+import GPUComputing from './GPUComputing';
 import Utils from './Utils';
+import * as workerpool from 'workerpool';
 
 /**
  * To refactor
  */
-const MIN_RADIUS = 8;
+const MIN_RADIUS = 10;
 const MAX_RADIUS = 25;
 
-const NUMBER_CIRCLE = 400;
+const NUMBER_CIRCLE = 500;
 const NUMBER_ARGUMENTS_BY_CIRCLE = 7;
 
 /**
@@ -21,23 +22,23 @@ class Chromosome {
   private offscreenCanvas: OffscreenCanvas;
   private offscreenCtx: OffscreenCanvasRenderingContext2D;
 
-  public constructor(genes: number[] = []) {
+  public constructor(genes: IGene[] = []) {
     if (genes.length === 0) {
-      for (let i = 0; i < NUMBER_CIRCLE * NUMBER_ARGUMENTS_BY_CIRCLE; i += 1) {
+      for (let i = 0; i < NUMBER_CIRCLE; i += 1) {
         this.genes.push(new Gene());
       }
     } else {
-      genes.forEach((gene) => {
+      genes.forEach((gene: IGene) => {
         this.genes.push(new Gene(gene));
       });
     }
   }
 
-  public getGenesArray(): number[] {
+  public getGenesArray(): IGene[] {
     return this.genes.map((gene) => gene.get());
   }
 
-  public setGenes(genes: number[]) {
+  public setGenes(genes: IGene[]) {
     this.genes = [];
 
     genes.map((gene) => {
@@ -53,23 +54,64 @@ class Chromosome {
    * @param referenceImage
    * @param canvas
    */
-  public computeFitnessByDifference(referenceImageData: Uint8ClampedArray, width: number, height: number) {
+  public computeFitnessByDifferenceGPU(referenceImageData: Uint8ClampedArray, width: number, height: number, ratio: number) {
     this.offscreenCanvas = new OffscreenCanvas(width, height);
     this.offscreenCtx = this.offscreenCanvas.getContext('2d');
 
-    this.renderChromosome(this.offscreenCtx, width, height);
+    this.renderChromosome(this.offscreenCtx, width, height, ratio);
+
+    const rendererImageData = this.offscreenCtx.getImageData(0, 0, width, height).data;
+
+    const matricesResult = GPUComputing.getKernel()(referenceImageData, rendererImageData) as number[];
+    let difference: number = matricesResult[0];
+
+    this.fitness = 1 - difference / referenceImageData.length;
+
+    return this.fitness;
+  }
+
+  public computeFitnessByDifference(referenceImageData: Uint8ClampedArray, width: number, height: number, ratio: number) {
+    this.offscreenCanvas = new OffscreenCanvas(width, height);
+    this.offscreenCtx = this.offscreenCanvas.getContext('2d');
+
+    this.renderChromosome(this.offscreenCtx, width, height, ratio);
 
     const rendererImageData = this.offscreenCtx.getImageData(0, 0, width, height).data;
 
     let difference: number = 0;
 
     for (let i = 0; i < referenceImageData.length; i += 1) {
-      difference += Math.abs(rendererImageData[i] - referenceImageData[i]) / 255;
+      difference += Math.abs(rendererImageData[i] - referenceImageData[i]);
     }
 
-    this.fitness = 1 - difference / referenceImageData.length;
+    this.fitness = 1 - difference / (referenceImageData.length * 255);
 
     return this.fitness;
+  }
+
+  public computeFitnessByWorker(
+    pool: workerpool.WorkerPool,
+    referenceImageData: Uint8ClampedArray,
+    width: number,
+    height: number,
+    ratio: number
+  ): Promise<number> {
+    return new Promise((resolve) => {
+      pool
+        .exec('computeFitness', [
+          {
+            genes: this.genes,
+            referenceImageData,
+            width,
+            height,
+            ratio,
+          },
+        ])
+        .then((fitness) => {
+          this.fitness = fitness;
+          resolve(this.fitness);
+        });
+    });
   }
 
   public computeFitness(referenceImageData: Uint8ClampedArray, width: number, height: number) {
@@ -133,19 +175,20 @@ class Chromosome {
     return this.genes[circleIdx * NUMBER_ARGUMENTS_BY_CIRCLE + geneIdx].get();
   }
 
-  private renderChromosome(ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, width: number, height: number) {
+  public renderChromosome(ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, width: number, height: number, ratio: number = 1) {
     for (let i = 0; i < NUMBER_CIRCLE; i += 1) {
-      const circleX = this.getCircleGene(i, 0) * width;
-      const circleY = this.getCircleGene(i, 1) * height;
-      const circleRadius = Math.round(this.getCircleGene(i, 2) * (MAX_RADIUS - MIN_RADIUS) + MIN_RADIUS);
-      const circleR = this.getCircleGene(i, 3);
-      const circleG = this.getCircleGene(i, 4);
-      const circleB = this.getCircleGene(i, 5);
-      const circleA = this.getCircleGene(i, 6);
+      const gene = this.getGene(i);
+      const circleX = gene.x * width;
+      const circleY = gene.y * height;
+      const circleRadius = Math.round(gene.radius * (MAX_RADIUS - MIN_RADIUS) + MIN_RADIUS);
+      const circleR = gene.r;
+      const circleG = gene.g;
+      const circleB = gene.b;
+      const circleA = gene.a;
 
       ctx.beginPath();
       ctx.fillStyle = `rgba(${circleR * 255}, ${circleG * 255}, ${circleB * 255}, ${circleA})`;
-      ctx.arc(circleX, circleY, circleRadius, 0, Math.PI * 2);
+      ctx.arc(circleX, circleY, circleRadius * ratio, 0, Math.PI * 2);
       ctx.closePath();
       ctx.fill();
     }

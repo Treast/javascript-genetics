@@ -1,5 +1,9 @@
 import Chromosome from './Chromosome';
-import Utils from './Utils';
+import { IGene } from './Gene';
+
+import * as workerpool from 'workerpool';
+// @ts-ignore
+import * as workerPath from 'file-loader?name=[name].js!./Worker';
 
 export interface IRendererContext {
   ctx: CanvasRenderingContext2D | null;
@@ -50,6 +54,8 @@ class Genome {
     maxGeneration: 0,
   };
 
+  private pool: workerpool.WorkerPool;
+
   public constructor(populationSize: number) {
     this.populationSize = populationSize;
 
@@ -69,6 +75,10 @@ class Genome {
       canvas: rendererCanvas,
       ctx: rendererCanvas.getContext('2d'),
     };
+
+    this.pool = workerpool.pool(workerPath, {
+      minWorkers: 'max',
+    });
   }
 
   public loadImage(imageSrc: string): Genome {
@@ -124,44 +134,68 @@ class Genome {
     this.render(callback);
   }
 
-  private generateGeneration() {
+  private generateGeneration(): Promise<void> {
     this.state.generation += 1;
 
-    this.computeFitness(); // + Sensible
-    this.makeSelection(); // Peu probable
-    this.makeCrossover(); //
-
-    if (this.state.generation !== this.state.maxGeneration) this.makeMutation();
+    return this.computeFitness()
+      .then(() => {
+        return this.makeSelection();
+      })
+      .then(() => this.makeCrossover())
+      .then(() => this.makeMutation());
   }
 
-  private computeFitness() {
-    const offscreenCanvas = new OffscreenCanvas(this.computingSize.width, this.computingSize.height);
-    const offscreenCtx = offscreenCanvas.getContext('2d');
+  private computeFitness(): Promise<void> {
+    return new Promise((resolve) => {
+      const promises: Promise<number>[] = [];
+      const offscreenCanvas = new OffscreenCanvas(this.computingSize.width, this.computingSize.height);
+      const offscreenCtx = offscreenCanvas.getContext('2d');
 
-    offscreenCtx.drawImage(this.reference.canvas, 0, 0, this.rendererSize.width, this.rendererSize.height);
-    const imageData = offscreenCtx.getImageData(0, 0, this.computingSize.width, this.computingSize.height).data;
+      offscreenCtx.drawImage(
+        this.reference.canvas,
+        0,
+        0,
+        this.rendererSize.width,
+        this.rendererSize.height,
+        0,
+        0,
+        this.computingSize.width,
+        this.computingSize.height
+      );
 
-    this.population.forEach((chromosome) => {
-      chromosome.computeFitnessByDifference(imageData, this.computingSize.width, this.computingSize.height);
+      const imageData = offscreenCtx.getImageData(0, 0, this.computingSize.width, this.computingSize.height).data;
+
+      const ratio: number = this.computingSize.width / this.rendererSize.width;
+
+      this.population.forEach((chromosome) => {
+        // chromosome.computeFitnessByDifference(imageData, this.computingSize.width, this.computingSize.height, ratio);
+        promises.push(chromosome.computeFitnessByWorker(this.pool, imageData, this.computingSize.width, this.computingSize.height, ratio));
+      });
+
+      return Promise.all(promises).then(() => resolve());
     });
   }
 
-  private makeSelection() {
-    this.population.sort((a: Chromosome, b: Chromosome) => {
-      return b.getFitness() - a.getFitness();
-    });
+  private makeSelection(): Promise<void> {
+    return new Promise((resolve) => {
+      this.population.sort((a: Chromosome, b: Chromosome) => {
+        return b.getFitness() - a.getFitness();
+      });
 
-    this.state.compliance = this.population[0].getFitness();
+      this.state.compliance = this.population[0].getFitness();
 
-    const idx = Math.round(this.selectionRate * this.populationSize);
+      const idx = Math.round(this.selectionRate * this.populationSize);
 
-    this.bestChromosomes = this.population.slice(0, idx);
-    this.worstChromosomes = this.population.slice(idx);
+      this.bestChromosomes = this.population.slice(0, idx);
+      this.worstChromosomes = this.population.slice(idx);
 
-    this.sumFitness = 0;
+      this.sumFitness = 0;
 
-    this.bestChromosomes.map((chromosome) => {
-      this.sumFitness += chromosome.getFitness();
+      this.bestChromosomes.map((chromosome) => {
+        this.sumFitness += chromosome.getFitness();
+      });
+
+      resolve();
     });
   }
 
@@ -180,47 +214,57 @@ class Genome {
   /**
    * Pour chaque individu manquant, on sélectionne 2 individus et on fusionne leurs gènes
    */
-  private makeCrossover() {
-    let chromosomeA: Chromosome, chromosomeB: Chromosome;
-    let chromosomeAIdx: number;
-    let remainingChromosomes: Chromosome[] = [];
-    let chromosomes1: number[], chromosomes2: number[], newChromosomes: number[], genes: number[], sliceIdx: number[];
+  private makeCrossover(): Promise<void> {
+    return new Promise((resolve) => {
+      let chromosomeA: Chromosome, chromosomeB: Chromosome;
+      let chromosomeAIdx: number;
+      let remainingChromosomes: Chromosome[] = [];
+      let chromosomes1: IGene[], chromosomes2: IGene[], newChromosomes: IGene[], genes: number[], sliceIdx: number[];
 
-    for (let i = 0; i < this.worstChromosomes.length; i += 1) {
-      chromosomeA = this.getRandomChromosome(this.bestChromosomes);
-      chromosomeAIdx = this.bestChromosomes.indexOf(chromosomeA);
-      remainingChromosomes = [...this.bestChromosomes.slice(0, chromosomeAIdx), ...this.bestChromosomes.slice(chromosomeAIdx)];
+      for (let i = 0; i < this.worstChromosomes.length; i += 1) {
+        chromosomeA = this.getRandomChromosome(this.bestChromosomes);
+        chromosomeAIdx = this.bestChromosomes.indexOf(chromosomeA);
+        remainingChromosomes = [...this.bestChromosomes.slice(0, chromosomeAIdx), ...this.bestChromosomes.slice(chromosomeAIdx)];
 
-      chromosomeB = this.getRandomChromosome(remainingChromosomes);
+        chromosomeB = this.getRandomChromosome(remainingChromosomes);
 
-      chromosomes1 = chromosomeA.getGenesArray();
-      chromosomes2 = chromosomeB.getGenesArray();
+        chromosomes1 = chromosomeA.getGenesArray().sort(() => 0.5 - Math.random());
+        chromosomes2 = chromosomeB.getGenesArray().sort(() => 0.5 - Math.random());
 
-      const sliceIdx = Math.floor((Math.random() * chromosomes1.length) / 7);
+        const sliceIdx = Math.floor(Math.random() * chromosomes1.length);
 
-      newChromosomes = [...chromosomes1.slice(0, sliceIdx * 7), ...chromosomes2.slice(sliceIdx * 7)];
+        newChromosomes = [...chromosomes1.slice(0, sliceIdx), ...chromosomes2.slice(sliceIdx)];
 
-      this.worstChromosomes[i].setGenes(newChromosomes);
-    }
-  }
+        this.worstChromosomes[i].setGenes(newChromosomes);
+      }
 
-  private makeMutation() {
-    this.population.forEach((chromosome) => {
-      chromosome.mutate(this.mutationRate);
+      this.population = [...this.bestChromosomes, ...this.worstChromosomes];
+
+      resolve();
     });
   }
 
-  public render(callback: () => void) {
-    this.renderer.ctx.fillStyle = '#000';
-    this.renderer.ctx.fillRect(0, 0, this.renderer.canvas.width, this.renderer.canvas.height);
+  private makeMutation(): Promise<void> {
+    return new Promise((resolve) => {
+      this.population.forEach((chromosome) => {
+        chromosome.mutate(this.mutationRate);
+      });
 
-    this.generateGeneration();
+      resolve();
+    });
+  }
 
-    this.population[0].render(this.renderer.canvas);
+  public async render(callback: () => void) {
+    this.generateGeneration().then(() => {
+      this.renderer.ctx.fillStyle = '#000';
+      this.renderer.ctx.fillRect(0, 0, this.renderer.canvas.width, this.renderer.canvas.height);
 
-    callback();
+      this.population[0].render(this.renderer.canvas);
 
-    if (this.state.generation < this.state.maxGeneration) requestAnimationFrame(() => this.render(callback));
+      callback();
+
+      if (this.state.generation < this.state.maxGeneration) requestAnimationFrame(() => this.render(callback));
+    });
   }
 }
 
