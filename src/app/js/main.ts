@@ -24,12 +24,12 @@ const onButtonRunClick = (e: Event) => {
   e.preventDefault();
   console.log('Running');
 
-  genome.generate(10000, () => {
+  genome.generate(5000, () => {
     showInformations();
   });
 };
 
 const showInformations = () => {
   roundSpan.innerText = `${genome.getState().generation}`;
-  complianceSpan.innerText = `${(genome.getState().compliance * 100).toFixed(2)}%`;
+  complianceSpan.innerText = `${genome.getState().compliance}`;
 };

@@ -138,9 +138,7 @@ class Genome {
     this.state.generation += 1;
 
     return this.computeFitness()
-      .then(() => {
-        return this.makeSelection();
-      })
+      .then(() => this.makeSelection())
       .then(() => this.makeCrossover())
       .then(() => this.makeMutation());
   }
@@ -179,7 +177,7 @@ class Genome {
   private makeSelection(): Promise<void> {
     return new Promise((resolve) => {
       this.population.sort((a: Chromosome, b: Chromosome) => {
-        return b.getFitness() - a.getFitness();
+        return a.getFitness() - b.getFitness();
       });
 
       this.state.compliance = this.population[0].getFitness();
@@ -200,15 +198,17 @@ class Genome {
   }
 
   private getRandomChromosome(selectedChromosomes: Chromosome[]) {
-    const random = Math.random() * this.sumFitness;
-    let sumFitness = 0;
-    for (const chromosome of selectedChromosomes) {
-      sumFitness += chromosome.getFitness();
-      if (random < sumFitness) {
-        return chromosome;
-      }
-    }
-    return null;
+    const random = Math.floor(Math.random() * selectedChromosomes.length);
+    return selectedChromosomes[random];
+    // const random = Math.random() * this.sumFitness;
+    // let sumFitness = 0;
+    // for (const chromosome of selectedChromosomes) {
+    //   sumFitness += chromosome.getFitness();
+    //   if (random < sumFitness) {
+    //     return chromosome;
+    //   }
+    // }
+    // return null;
   }
 
   /**
@@ -217,15 +217,13 @@ class Genome {
   private makeCrossover(): Promise<void> {
     return new Promise((resolve) => {
       let chromosomeA: Chromosome, chromosomeB: Chromosome;
-      let chromosomeAIdx: number;
       let remainingChromosomes: Chromosome[] = [];
       let chromosomes1: IGene[], chromosomes2: IGene[], newChromosomes: IGene[], genes: number[], sliceIdx: number[];
 
-      for (let i = 0; i < this.worstChromosomes.length; i += 1) {
-        chromosomeA = this.getRandomChromosome(this.bestChromosomes);
-        chromosomeAIdx = this.bestChromosomes.indexOf(chromosomeA);
-        remainingChromosomes = [...this.bestChromosomes.slice(0, chromosomeAIdx), ...this.bestChromosomes.slice(chromosomeAIdx)];
+      chromosomeA = this.bestChromosomes[0];
+      remainingChromosomes = [...this.bestChromosomes.slice(1)];
 
+      for (let i = 0; i < this.worstChromosomes.length; i += 1) {
         chromosomeB = this.getRandomChromosome(remainingChromosomes);
 
         chromosomes1 = chromosomeA.getGenesArray().sort(() => 0.5 - Math.random());

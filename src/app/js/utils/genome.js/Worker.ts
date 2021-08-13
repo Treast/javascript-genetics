@@ -11,7 +11,6 @@ export interface IWorkerData {
 const computeFitness = (data: IWorkerData) => {
   const canvas = new OffscreenCanvas(data.width, data.height);
   const ctx = canvas.getContext('2d');
-
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, data.width, data.height);
 
@@ -25,10 +24,9 @@ const computeFitness = (data: IWorkerData) => {
     const circleB = gene.b;
     const circleA = gene.a;
 
-    ctx.beginPath();
     ctx.fillStyle = `rgba(${circleR * 255}, ${circleG * 255}, ${circleB * 255}, ${circleA})`;
+    ctx.beginPath();
     ctx.arc(circleX, circleY, circleRadius * data.ratio, 0, Math.PI * 2);
-    ctx.closePath();
     ctx.fill();
   }
 
@@ -41,7 +39,7 @@ const computeFitness = (data: IWorkerData) => {
     difference += Math.abs(referenceImageData[i] - rendererImageData[i]);
   }
 
-  return 1 - difference / (referenceImageData.length * 256);
+  return difference * difference;
 };
 
 //@ts-ignore

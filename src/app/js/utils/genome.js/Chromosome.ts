@@ -186,10 +186,9 @@ class Chromosome {
       const circleB = gene.b;
       const circleA = gene.a;
 
-      ctx.beginPath();
       ctx.fillStyle = `rgba(${circleR * 255}, ${circleG * 255}, ${circleB * 255}, ${circleA})`;
+      ctx.beginPath();
       ctx.arc(circleX, circleY, circleRadius * ratio, 0, Math.PI * 2);
-      ctx.closePath();
       ctx.fill();
     }
   }
