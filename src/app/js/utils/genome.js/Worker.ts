@@ -14,8 +14,10 @@ const computeFitness = (data: IWorkerData) => {
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, data.width, data.height);
 
+  const sortedGenes = [...data.genes].sort((a, b) => a.value.z - b.value.z).map((gene) => gene.value);
+
   for (let i = 0; i < data.genes.length; i += 1) {
-    const gene = data.genes[i].value;
+    const gene = sortedGenes[i];
     const circleX = gene.x * data.width;
     const circleY = gene.y * data.height;
     const circleRadius = Math.round(gene.radius * (25 - 10) + 10);
@@ -39,7 +41,7 @@ const computeFitness = (data: IWorkerData) => {
     difference += Math.abs(referenceImageData[i] - rendererImageData[i]);
   }
 
-  return difference * difference;
+  return 1 - difference / (referenceImageData.length * 256);
 };
 
 //@ts-ignore

@@ -54,6 +54,9 @@ class Genome {
     maxGeneration: 0,
   };
 
+  private bestPopulation: Chromosome[] = [];
+  private bestPopulationFitness: number = 0;
+
   private pool: workerpool.WorkerPool;
 
   public constructor(populationSize: number) {
@@ -176,8 +179,17 @@ class Genome {
 
   private makeSelection(): Promise<void> {
     return new Promise((resolve) => {
+      const sumFitness = this.population.reduce((acc, val) => acc + val.getFitness(), 0);
+
+      if (sumFitness < this.bestPopulationFitness) {
+        this.population = [...this.bestPopulation];
+      } else {
+        this.bestPopulation = [...this.population];
+        this.bestPopulationFitness = sumFitness;
+      }
+
       this.population.sort((a: Chromosome, b: Chromosome) => {
-        return a.getFitness() - b.getFitness();
+        return b.getFitness() - a.getFitness();
       });
 
       this.state.compliance = this.population[0].getFitness();

@@ -4,10 +4,10 @@ import Genome from './utils/genome.js/Genome';
 const app = new App();
 
 const genome = new Genome(50)
-  .setMutationRate(0.05)
+  .setMutationRate(0.01)
   .setSelectionRate(0.15)
   .setRendererSize({ height: 400, width: 400 })
-  .setComputingSize({ height: 80, width: 80 });
+  .setComputingSize({ height: 60, width: 60 });
 
 const buttonRun = document.querySelector('#buttonRun');
 const roundSpan = document.querySelector('#informationRound span') as HTMLSpanElement;
@@ -31,5 +31,5 @@ const onButtonRunClick = (e: Event) => {
 
 const showInformations = () => {
   roundSpan.innerText = `${genome.getState().generation}`;
-  complianceSpan.innerText = `${genome.getState().compliance}`;
+  complianceSpan.innerText = `${(genome.getState().compliance * 100).toFixed(2)}%`;
 };

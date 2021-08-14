@@ -148,9 +148,10 @@ class Chromosome {
   }
 
   public mutate(mutationRate: number) {
-    if (Math.random() < mutationRate) {
-      const idx = Math.floor(Math.random() * this.genes.length);
-      this.genes[idx] = new Gene();
+    for (let i = 0; i < this.genes.length; i += 1) {
+      if (Math.random() < mutationRate) {
+        this.genes[i] = new Gene();
+      }
     }
   }
 
@@ -176,8 +177,10 @@ class Chromosome {
   }
 
   public renderChromosome(ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, width: number, height: number, ratio: number = 1) {
+    const sortedGenes = [...this.genes].sort((a, b) => a.get().z - b.get().z).map((gene) => gene.get());
+
     for (let i = 0; i < NUMBER_CIRCLE; i += 1) {
-      const gene = this.getGene(i);
+      const gene = sortedGenes[i];
       const circleX = gene.x * width;
       const circleY = gene.y * height;
       const circleRadius = Math.round(gene.radius * (MAX_RADIUS - MIN_RADIUS) + MIN_RADIUS);

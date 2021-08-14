@@ -6,6 +6,7 @@ export interface IGene {
   g: number;
   b: number;
   a: number;
+  z: number;
 }
 
 class Gene {
@@ -20,6 +21,7 @@ class Gene {
       g: Math.random(),
       b: Math.random(),
       a: Math.random(),
+      z: Math.random(),
     };
   }
 
